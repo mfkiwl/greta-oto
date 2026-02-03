@@ -14,7 +14,7 @@
 // basic PVT entry functions
 void MsrProcInit();
 void PvtProcInit(StartType Start, PSYSTEM_TIME CurTime, LLH *CurPosition);
-void PvtProc(int CurMsInterval, int ClockAdjust);
+void PvtProc(int MeasurementNumber, int CurMsInterval, int ClockAdjust);
 void GpsDecodeInit();
 void BdsDecodeInit();
 int BdsDecodeTask(void *Param);

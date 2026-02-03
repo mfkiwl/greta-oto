@@ -11,8 +11,10 @@
 
 extern int OutputBasebandMeasPort;
 extern int OutputBasebandDataPort;
+extern int OutputNmeaPort;
 
 int MeasPrintTask(void *Param);
 int BasebandDataOutput(void *Param);
+int NmeaOutput(void* Param);
 
 #endif //__COMPOSE_OUTPUT_H__

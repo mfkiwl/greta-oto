@@ -100,11 +100,13 @@ void CalcSatellitesInfo(PCHANNEL_STATUS ObservationList[], int ObsCount)
 int FilterObservation(PCHANNEL_STATUS ObservationList[], int ObsCount)
 {
 	int i, sv_index, PrevSignal = -1, index = 0;
-	unsigned long long GpsInUseMask = g_PvtConfig.GpsSatMaskOut, BdsInUseMask = g_PvtConfig.BdsSatMaskOut, GalileoInUseMask = g_PvtConfig.GalileoSatMaskOut;
-	unsigned long long *pInUseMask = &GpsInUseMask;
+	unsigned long long *pInUseMask = &g_ReceiverInfo.GpsSatInUse;
 	PSATELLITE_INFO SatelliteInfo = g_GpsSatelliteInfo;
-	double ElevationMask = g_PvtConfig.ElevationMask * PI / 180;
+	double ElevationMask = g_SystemConfig.ElevationMask * PI / 180;
 
+	g_ReceiverInfo.GpsSatInUse = g_SystemConfig.GpsSatMaskOut;
+	g_ReceiverInfo.BdsSatInUse = g_SystemConfig.BdsSatMaskOut;
+	g_ReceiverInfo.GalileoSatInUse = g_SystemConfig.GalileoSatMaskOut;
 	// first round filtering, remove duplicate satellite, ephemeris expire satellite and do elevation mask
 	for (i = 0; i < ObsCount; i ++)
 	{
@@ -112,13 +114,13 @@ int FilterObservation(PCHANNEL_STATUS ObservationList[], int ObsCount)
 		if (ObservationList[i]->Signal == SIGNAL_B1C && PrevSignal != SIGNAL_B1C)
 		{
 			PrevSignal = SIGNAL_B1C;
-			pInUseMask = &BdsInUseMask;
+			pInUseMask = &g_ReceiverInfo.BdsSatInUse;
 			SatelliteInfo = g_BdsSatelliteInfo;
 		}
 		else if (ObservationList[i]->Signal == SIGNAL_E1 && PrevSignal != SIGNAL_E1)
 		{
 			PrevSignal = SIGNAL_E1;
-			pInUseMask = &GalileoInUseMask;
+			pInUseMask = &g_ReceiverInfo.GalileoSatInUse;
 			SatelliteInfo = g_GalileoSatelliteInfo;
 		}
 		sv_index = ObservationList[i]->svid - 1;
@@ -142,6 +144,9 @@ int FilterObservation(PCHANNEL_STATUS ObservationList[], int ObsCount)
 		ObservationList[index++] = ObservationList[i];
 		*pInUseMask |= (1LL << sv_index);
 	}
+	g_ReceiverInfo.GpsSatInUse ^= g_SystemConfig.GpsSatMaskOut;
+	g_ReceiverInfo.BdsSatInUse ^= g_SystemConfig.BdsSatMaskOut;
+	g_ReceiverInfo.GalileoSatInUse ^= g_SystemConfig.GalileoSatMaskOut;
 
 	return index;
 }

@@ -79,9 +79,14 @@ void SwitchTrackingStage(PCHANNEL_STATE ChannelState, unsigned int TrackingStage
 		ChannelState->CarrierFreqBase = ChannelState->CarrierFreqSave;
 //		ChannelState->CodeFreqBase = ChannelState->CodeFreqSave;
 		ChannelState->CodeFreqBase = CARR_TO_CODE_FREQ(ChannelState->CarrierFreqSave);
-		STATE_BUF_SET_CARRIER_FREQ(&(ChannelState->StateBufferCache), ChannelState->CarrierFreqBase);
-		STATE_BUF_SET_CODE_FREQ(&(ChannelState->StateBufferCache), ChannelState->CodeFreqBase);
-		ChannelState->State |= STATE_CACHE_FREQ_DIRTY;
+		STATE_BUF_SET_CARRIER_FREQ(StateBuffer, ChannelState->CarrierFreqBase);
+		STATE_BUF_SET_CODE_FREQ(StateBuffer, ChannelState->CodeFreqBase);
+		STATE_BUF_DISABLE_BOC(StateBuffer);	// disable BOC
+		STATE_BUF_SET_NARROW_FACTOR(StateBuffer, 0);	// set correlator interval to 1/2 chip
+		if (!SIGNAL_IS_L1CA(ChannelState->Signal))
+			StateBuffer->CarrierFreq += DIVIDE_ROUND(1023000LL << 32, SAMPLE_FREQ);	// apply 1.023MHz bias when remove BOC
+		ChannelState->State |= (STATE_CACHE_STATE_DIRTY | STATE_CACHE_FREQ_DIRTY);
+		ChannelState->State &= ~STATE_ENABLE_BOC;
 		ChannelState->CodeSearchCount = 0;
 	}
 	else if (TrackingStage == STAGE_PULL_IN)
@@ -215,6 +220,7 @@ int StageDetermination(PCHANNEL_STATE ChannelState)
 				// force adjust carrier frequency and align correlator peak
 				ChannelState->StateBufferCache.CarrierFreq += ChannelState->FrequencyDiff;
 				ChannelState->State |= STATE_CACHE_FREQ_DIRTY;
+				ChannelState->CarrierFreqBase = ChannelState->StateBufferCache.CarrierFreq;
 				Jump = (ChannelState->DelayDiff + 57344) / 16384 - 3;	// apply 3.5 CorInterval offset (16384) then round down to get nearest rounding
 				if (Jump != 0)
 				{

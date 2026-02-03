@@ -19,6 +19,7 @@ extern unsigned int BasebandTickCount;
 extern BB_MEASUREMENT BasebandMeasurement[TOTAL_CHANNEL_NUMBER];
 
 void TEInitialize();
+PCHANNEL_STATE IterateChannel(int First);
 U32 GetChannelEnable();
 void UpdateChannels();
 PCHANNEL_STATE GetAvailableChannel();

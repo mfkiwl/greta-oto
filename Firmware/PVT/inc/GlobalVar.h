@@ -9,7 +9,7 @@
 #ifndef __GLOBAL_VAR_H__
 #define __GLOBAL_VAR_H__
 
-#include "CommonDefines.h"
+#include "DataTypes.h"
 
 // channel status used by PVT
 EXTERN CHANNEL_STATUS g_ChannelStatus[TOTAL_CHANNEL_NUMBER];
@@ -30,7 +30,7 @@ EXTERN UTC_PARAM g_GpsUtcParam;
 EXTERN UTC_PARAM g_BdsUtcParam;
 // positioning result and internal data
 EXTERN RECEIVER_INFO g_ReceiverInfo;
-EXTERN PVT_CONFIG g_PvtConfig;
+EXTERN SYSTEM_CONFIG g_SystemConfig;
 EXTERN PVT_CORE_DATA g_PvtCoreData;
 EXTERN unsigned int g_GpsSatInView;
 EXTERN unsigned long long g_GalileoSatInView;

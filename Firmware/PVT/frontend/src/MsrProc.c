@@ -153,8 +153,7 @@ int MeasProcTask(void *Param)
 		AddToTask(TASK_INOUT, MeasPrintTask, Param, sizeof(BB_MEAS_PARAM));
 	}
 	// do PVT
-	if (MeasurementNumber > 0)
-		PvtProc(MeasParam->Interval, MeasParam->ClockAdjust);
+	PvtProc(MeasurementNumber, MeasParam->Interval, MeasParam->ClockAdjust);
 
 	return 0;
 }

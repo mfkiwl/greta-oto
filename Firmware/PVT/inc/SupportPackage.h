@@ -38,11 +38,13 @@ unsigned int Crc24qEncode(unsigned int *BitStream, int Length);
 // conversion functions
 void EcefToLlh(const KINEMATIC_INFO *ecef_pos, LLH *llh_pos);
 void LlhToEcef (const LLH *llh_pos, KINEMATIC_INFO *ecef_pos);
+void VelocityToLocal(const KINEMATIC_INFO *ecef_pos, const PCONVERT_MATRIX pConvertMatrix, GROUND_SPEED *local_speed);
 void GpsTimeToUtc(int GpsWeek, int WeekMsCount, PSYSTEM_TIME pUtcTime, PUTC_PARAM pUtcParam);
-void UtcToGpsTime(PSYSTEM_TIME pUtcTime, int *pGpsWeek, int *pWeekMsCount, PUTC_PARAM pUtcParam);
+void UtcToGpsTime(const PSYSTEM_TIME pUtcTime, int *pGpsWeek, int *pWeekMsCount, PUTC_PARAM pUtcParam);
 void GlonassTimeToUtc(int LeapYears, int DayNumber, int DayMsCount, PSYSTEM_TIME pUtcTime);
-void UtcToGlonassTime(PSYSTEM_TIME pUtcTime, int *LeapYears, int *DayNumber, int *DayMsCount);
-void CalcConvMatrix(KINEMATIC_INFO *pReceiverPos, PCONVERT_MATRIX pConvertMatrix);
+void UtcToGlonassTime(const PSYSTEM_TIME pUtcTime, int *LeapYears, int *DayNumber, int *DayMsCount);
+void CalcConvMatrix(const KINEMATIC_INFO *pReceiverPos, PCONVERT_MATRIX pConvertMatrix);
+void CalcDopValues(const double *PosInvMatrix, const PCONVERT_MATRIX pConvertMatrix, double *DopArray);
 
 // satellite coordinate related functions
 double ClockCorrection(PGNSS_EPHEMERIS pEph, double TransmitTime);
@@ -70,5 +72,10 @@ int KFPosition(PCHANNEL_STATUS ObservationList[], int ObsCount, int PosUseSatCou
 // parameter load/save functions
 void LoadAllParameters();
 void SaveAllParameters();
+
+// output format
+int PowInteger(int x, int y);
+char *PrintUint(char *p, unsigned int Value, int Digits);
+char *PrintFloat(char *p, double Value, int Digits);
 
 #endif //__SUPPORT_PKG_H__

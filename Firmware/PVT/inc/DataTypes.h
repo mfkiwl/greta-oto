@@ -280,10 +280,14 @@ typedef struct
 	RECEIVER_TIME *ReceiverTime;
 	PosAccuracy PosQuality;
 	unsigned int PosFlag;	// Positioning flag
+	int SatCount;	// satellite used to do positioning
 	PositionType PrevPosType;
 	PositionType CurrentPosType;
 //	unsigned int PosUseSat; //sats used to positioning
 //	unsigned int VelUseSat; //sats used to velocity
+	unsigned long long GpsSatInUse;
+	unsigned long long BdsSatInUse;
+	unsigned long long GalileoSatInUse;
 	CONVERT_MATRIX ConvertMatrix;
 } RECEIVER_INFO, *PRECEIVER_INFO;
 // definitions for PosFlag field
@@ -293,19 +297,35 @@ typedef struct
 #define PVT_USE_GPS			(1 << SYSTEM_GPS)
 #define PVT_USE_BDS			(1 << SYSTEM_BDS)
 #define PVT_USE_GAL			(1 << SYSTEM_GAL)
+#define PVT_USE_SYS			(PVT_USE_GPS | PVT_USE_BDS | PVT_USE_GAL)
+
+typedef struct
+{
+	unsigned int NmeaTypes;
+	LLH PosLLH;				// receiver position
+	GROUND_SPEED GroundSpeed;// receiver group speed
+	double DopArray[4];		// HDOP, VDOP, PDOP, TDOP
+	SYSTEM_TIME Time;
+	PosAccuracy PosQuality;
+	unsigned int PosFlag;	// Positioning flag
+	int SatCount;	// satellite used to do positioning
+	unsigned long long SatInUse[PVT_MAX_SYSTEM_ID];
+} NMEA_INFO, *PNMEA_INFO;
 
 typedef struct
 {
 	unsigned int PvtConfigFlags;
-	unsigned int GpsSatMaskOut;
+	unsigned long long GpsSatMaskOut;
 	unsigned long long GalileoSatMaskOut;
 	unsigned long long BdsSatMaskOut;
 	double ElevationMask;	// in radian
-} PVT_CONFIG, *PPVT_CONFIG;
+	int NmeaInterval[16];
+} SYSTEM_CONFIG, *PSYSTEM_CONFIG;
 // definitions for PvtConfigFlags field
 #define PVT_CONFIG_USE_GPS			(1 << SYSTEM_GPS)
 #define PVT_CONFIG_USE_BDS			(1 << SYSTEM_BDS)
 #define PVT_CONFIG_USE_GAL			(1 << SYSTEM_GAL)
+#define PVT_CONFIG_USE_SYS			(PVT_CONFIG_USE_GPS | PVT_CONFIG_USE_BDS | PVT_CONFIG_USE_GAL)
 #define PVT_CONFIG_USE_KF			(0x100)
 #define PVT_CONFIG_WEIGHTED_LSQ		(0x200)
 
@@ -323,7 +343,7 @@ typedef struct
 								// bit3: 1: elevation and azimuth using latest position
 								// bit4: 1: ephemeris expired
 								// bit5: 1: has valid predicted psr
-	                            // bit6: 1: unhealth
+								// bit6: 1: unhealth
 	unsigned char FreqNumber;
 	unsigned char HealthFlag;	// bit0~7:  healthy flag of ephemeris
 								// bit8~15: healthy flag of almanac
@@ -341,29 +361,29 @@ typedef struct
 
 typedef struct
 {
-    double	a0;  // 2**-30
-    double	a1;  // 2**-27
-    double	a2;  // 2**-24
-    double	a3;  // 2**-24
-    double	b0;  // 2**11
-    double	b1;  // 2**14
-    double	b2;  // 2**16
-    double	b3;  // 2**16
-    unsigned long	flag; // 1, availble   
+	double	a0;  // 2**-30
+	double	a1;  // 2**-27
+	double	a2;  // 2**-24
+	double	a3;  // 2**-24
+	double	b0;  // 2**11
+	double	b1;  // 2**14
+	double	b2;  // 2**16
+	double	b3;  // 2**16
+	unsigned long	flag; // 1, availble   
 } GPS_IONO_PARAM, *PGPS_IONO_PARAM;
 
 typedef struct
 {
-    double	alpha1;  // 2**-3
-    double	alpha2;  // 2**-3
-    double	alpha3;  // 2**-3
-    double	alpha4;  // 2**-3
-    double	alpha5;  // -2**-3
-    double	alpha6;  // 2**-3
-    double	alpha7;  // 2**-3
-    double	alpha8;  // 2**-3
-    double	alpha9;  // 2**3
-    unsigned long	flag; // 1, availble   
+	double	alpha1;  // 2**-3
+	double	alpha2;  // 2**-3
+	double	alpha3;  // 2**-3
+	double	alpha4;  // 2**-3
+	double	alpha5;  // -2**-3
+	double	alpha6;  // 2**-3
+	double	alpha7;  // 2**-3
+	double	alpha8;  // 2**-3
+	double	alpha9;  // 2**3
+	unsigned long	flag; // 1, availble   
 } BDS_IONO_PARAM, *PBDS_IONO_PARAM;
 
 // UTC parameters
@@ -402,10 +422,7 @@ typedef struct
 	HMATRIX h;
 
 	double PosInvMatrix[(PVT_MAX_SYSTEM_ID + 3) * (PVT_MAX_SYSTEM_ID + 4) / 2];	// Inv(HtH) for position
-	double VelInvMatrix[10];	// Inv(HtH) for velocity
-	double DOPInvMatrix[10];	// Inv(HtH) with all weight set to 1
-
-	CONVERT_MATRIX ConvertMatrix;
+//	double DOPMatrix[10];	// Inv(HtH) with all weight set to 1
 } PVT_CORE_DATA, *PPVT_CORE_DATA;
 
 #pragma pack(pop)	//restore original alignment

@@ -8,12 +8,16 @@
 
 #include "CommonDefines.h"
 #include "PlatformCtrl.h"
+#include "TEManager.h"
 #include "TimeManager.h"
+#include "TaskManager.h"
 #include "PvtConst.h"
 #include "DataTypes.h"
 #include "GlobalVar.h"
 #include "SupportPackage.h"
+#include "NmeaEncode.h"
 #include "SatManage.h"
+#include "ComposeOutput.h"
 
 #include <string.h>
 #include <math.h>
@@ -21,6 +25,8 @@
 
 static int PvtFix(int MsInterval, int ClockAdjust);
 static PositionType GetPosMethod(PCHANNEL_STATUS ObservationList[], int *Count, PositionType PrevPosType);
+static void UpdateSatellitesStates();
+static void AssignNmeaInfo(PNMEA_INFO NmeaInfo);
 
 // in order to adapt to multiple system, state placement in core data is as following:
 // 3 dimention velocity and clock drifting (mostly comes from XTAL so same to all systems) followed by
@@ -88,10 +94,10 @@ void PvtProcInit(StartType Start, PSYSTEM_TIME CurTime, LLH *CurPosition)
 	}
 	g_ReceiverInfo.PosVel.vx = g_ReceiverInfo.PosVel.vy = g_ReceiverInfo.PosVel.vz = 0.0;
 
-	g_PvtConfig.PvtConfigFlags = PVT_CONFIG_USE_GPS | PVT_CONFIG_USE_BDS | PVT_CONFIG_USE_GAL;
-//	g_PvtConfig.PvtConfigFlags = PVT_CONFIG_USE_BDS;
-	g_PvtConfig.PvtConfigFlags |= ENABLE_KALMAN_FILTER ? PVT_CONFIG_USE_KF : 0;
-	g_PvtConfig.ElevationMask = 5.0;
+	g_SystemConfig.PvtConfigFlags = PVT_CONFIG_USE_GPS | PVT_CONFIG_USE_BDS | PVT_CONFIG_USE_GAL;
+//	g_SystemConfig.PvtConfigFlags = PVT_CONFIG_USE_BDS;
+	g_SystemConfig.PvtConfigFlags |= ENABLE_KALMAN_FILTER ? PVT_CONFIG_USE_KF : 0;
+	g_SystemConfig.ElevationMask = 5.0;
 
 	// initialize state with input parameter
 	g_PvtCoreData.StateVector[0] = g_ReceiverInfo.PosVel.vx;
@@ -107,6 +113,11 @@ void PvtProcInit(StartType Start, PSYSTEM_TIME CurTime, LLH *CurPosition)
 		CalcConvMatrix(&g_ReceiverInfo.PosVel, &g_ReceiverInfo.ConvertMatrix);
 		g_ReceiverInfo.PosQuality = ExtSetPos;
 	}
+
+//	memcpy(NmeaOutputInterval, g_SystemConfig.NmeaInterval, sizeof(int) * NMEA_MAX);
+	memset(NmeaOutputInterval, 0, sizeof(int) * NMEA_MAX);
+	NmeaOutputInterval[NMEA_GGA] = NmeaOutputInterval[NMEA_RMC] = NominalMeasInterval;
+	NmeaOutputInterval[NMEA_GSV] = 1000;
 }
 
 //*************** Do position fix and update corresponding variables ****************
@@ -115,18 +126,25 @@ void PvtProcInit(StartType Start, PSYSTEM_TIME CurTime, LLH *CurPosition)
 //   ClockAdjust: clock adjustment (in millisecond) to local receiver time
 // Return value:
 //   none
-void PvtProc(int CurMsInterval, int ClockAdjust)
+void PvtProc(int MeasurementNumber, int CurMsInterval, int ClockAdjust)
 {
-	int PosFixResult;
-	SYSTEM_TIME UtcTime;
+	int PosFixResult = 0;
+	NMEA_INFO NmeaInfo;
 
-	PosFixResult = PvtFix(CurMsInterval, ClockAdjust);
+	if (MeasurementNumber > 0)
+		PosFixResult = PvtFix(CurMsInterval, ClockAdjust);
+	// convert ECEF coordinate to LLH coordinate
+	EcefToLlh(&(g_ReceiverInfo.PosVel), &(g_ReceiverInfo.PosLLH));
+	VelocityToLocal(&(g_ReceiverInfo.PosVel), &g_ReceiverInfo.ConvertMatrix, &g_ReceiverInfo.GroundSpeed);
 	// TODO: update satellite in view list, adjust observation time etc.
-	if (1 && PosFixResult > 0)
+	UpdateSatellitesStates();
+	AssignNmeaInfo(&NmeaInfo);
+	if (NmeaInfo.NmeaTypes)
+		AddToTask(TASK_INOUT, NmeaOutput, &NmeaInfo, sizeof(NMEA_INFO));
+	if (PosFixResult > 0)
 	{
-		GpsTimeToUtc(g_ReceiverInfo.ReceiverTime->GpsWeekNumber, g_ReceiverInfo.ReceiverTime->GpsMsCount, &UtcTime, (PUTC_PARAM)0);
-		DEBUG_OUTPUT(OUTPUT_CONTROL(PVT, INFO), "%04d/%02d/%02d %02d:%02d:%02d.%03d %14.9f %14.9f %10.4f   5  %2d\n",
-			UtcTime.Year, UtcTime.Month, UtcTime.Day, UtcTime.Hour, UtcTime.Minute, UtcTime.Second, UtcTime.Millisecond,
+		if (1) DEBUG_OUTPUT(OUTPUT_CONTROL(PVT, INFO), "%04d/%02d/%02d %02d:%02d:%02d.%03d %14.9f %14.9f %10.4f   5  %2d\n",
+			NmeaInfo.Time.Year, NmeaInfo.Time.Month, NmeaInfo.Time.Day, NmeaInfo.Time.Hour, NmeaInfo.Time.Minute, NmeaInfo.Time.Second, NmeaInfo.Time.Millisecond,
 			g_ReceiverInfo.PosLLH.lat * 180 / PI, g_ReceiverInfo.PosLLH.lon * 180 / PI, g_ReceiverInfo.PosLLH.hae, PosFixResult);
 	}
 }
@@ -299,7 +317,7 @@ int PvtFix(int MsInterval, int ClockAdjust)
 	}
 
 	// for LSQ, determine whether can transfer to KF
-	if (g_ReceiverInfo.CurrentPosType == PosTypeLSQ && (g_PvtConfig.PvtConfigFlags & PVT_CONFIG_USE_KF) != 0 && g_ReceiverInfo.PosQuality == AccuratePos)
+	if (g_ReceiverInfo.CurrentPosType == PosTypeLSQ && (g_SystemConfig.PvtConfigFlags & PVT_CONFIG_USE_KF) != 0 && g_ReceiverInfo.PosQuality == AccuratePos)
 	{
 		g_ReceiverInfo.CurrentPosType = PosTypeToKF;
 		InitPMatrix(g_PvtCoreData.PMatrix, g_PvtCoreData.PosInvMatrix, PosResult);
@@ -316,9 +334,9 @@ int PvtFix(int MsInterval, int ClockAdjust)
 	g_ReceiverInfo.PosVel.vy = STATE_VY;
 	g_ReceiverInfo.PosVel.vz = STATE_VZ;
 	g_ReceiverInfo.ReceiverTime->ClkDrifting = STATE_TDOT / LIGHT_SPEED;
+	CalcDopValues(g_PvtCoreData.PosInvMatrix, &g_ReceiverInfo.ConvertMatrix, g_ReceiverInfo.DopArray);
 
-	// convert ECEF coordinate to LLH coordinate
-	EcefToLlh(&(g_ReceiverInfo.PosVel), &(g_ReceiverInfo.PosLLH));
+	g_ReceiverInfo.SatCount = SatCount;
 	return SatCount;
 }
 
@@ -342,7 +360,7 @@ PositionType GetPosMethod(PCHANNEL_STATUS ObservationList[], int *Count, Positio
 		return PosTypeNone;
 
 	// first to check whether can do KF
-	if ((g_PvtConfig.PvtConfigFlags & PVT_CONFIG_USE_KF) && PrevPosType >= PosTypeToKF && SatCount > 0)
+	if ((g_SystemConfig.PvtConfigFlags & PVT_CONFIG_USE_KF) && PrevPosType >= PosTypeToKF && SatCount > 0)
 		return PosTypeKFPos;
 
 	// whether can do normal LSQ or 2D LSQ
@@ -366,4 +384,60 @@ PositionType GetPosMethod(PCHANNEL_STATUS ObservationList[], int *Count, Positio
 		return (RedundantSat == 2) ? PosType2D : PosTypeLSQ;
 	else
 		return PosTypeNone;
+}
+
+void UpdateSatellitesStates()
+{
+	int i;
+	PCHANNEL_STATE ChannelState;
+
+	for (i = 0; i < TOTAL_GPS_SAT_NUMBER; i ++)
+		g_GpsSatelliteInfo[i].CN0 = 0;
+	for (i = 0; i < TOTAL_BDS_SAT_NUMBER; i ++)
+		g_BdsSatelliteInfo[i].CN0 = 0;
+	for (i = 0; i < TOTAL_GAL_SAT_NUMBER; i ++)
+		g_GalileoSatelliteInfo[i].CN0 = 0;
+
+	ChannelState = IterateChannel(1);
+	while (ChannelState)
+	{
+		if (SIGNAL_IS_L1CA(ChannelState->Signal))
+			g_GpsSatelliteInfo[ChannelState->Svid-1].CN0 = ChannelState->CN0;
+		else if (SIGNAL_IS_B1C(ChannelState->Signal))
+			g_BdsSatelliteInfo[ChannelState->Svid-1].CN0 = ChannelState->CN0;
+		else if (SIGNAL_IS_E1(ChannelState->Signal))
+			g_GalileoSatelliteInfo[ChannelState->Svid-1].CN0 = ChannelState->CN0;
+		ChannelState = IterateChannel(0);
+	}
+}
+
+void AssignNmeaInfo(PNMEA_INFO NmeaInfo)
+{
+	int i;
+	int MsCount = g_ReceiverInfo.ReceiverTime->GpsMsCount;
+
+	// determine which NMEA type to output
+	NmeaInfo->NmeaTypes = 0;
+	for (i = 0; i < NMEA_MAX; i ++)
+	{
+		if (NmeaOutputInterval[i] <= 0)
+			continue;
+		if ((MsCount % NmeaOutputInterval[i]) < NominalMeasInterval)
+			NmeaInfo->NmeaTypes |= (1 << i);
+	}
+
+	if (NmeaInfo->NmeaTypes)
+	{
+		// assign contents of NmeaInfo
+		memcpy(&(NmeaInfo->PosLLH), &g_ReceiverInfo.PosLLH, sizeof(LLH));
+		memcpy(&(NmeaInfo->GroundSpeed), &g_ReceiverInfo.GroundSpeed, sizeof(GROUND_SPEED));
+		memcpy(NmeaInfo->DopArray, g_ReceiverInfo.DopArray, sizeof(double) * 4);
+		GpsTimeToUtc(g_ReceiverInfo.ReceiverTime->GpsWeekNumber, g_ReceiverInfo.ReceiverTime->GpsMsCount, &(NmeaInfo->Time), (PUTC_PARAM)0);
+		NmeaInfo->PosQuality = g_ReceiverInfo.PosQuality;
+		NmeaInfo->PosFlag = g_ReceiverInfo.PosFlag;
+		NmeaInfo->SatCount = g_ReceiverInfo.SatCount;
+		NmeaInfo->SatInUse[0] = g_ReceiverInfo.GpsSatInUse;
+		NmeaInfo->SatInUse[1] = g_ReceiverInfo.BdsSatInUse;
+		NmeaInfo->SatInUse[2] = g_ReceiverInfo.GalileoSatInUse;
+	}
 }

@@ -12,9 +12,12 @@
 #include "TEManager.h"
 #include "PlatformCtrl.h"
 #include "BBDefines.h"
+#include "DataTypes.h"
+#include "NmeaEncode.h"
 
 int OutputBasebandMeasPort = DEFAULT_BB_MEAS_PORT;
 int OutputBasebandDataPort = DEFAULT_BB_DATA_PORT;
+int OutputNmeaPort = DEFAULT_NMEA_PORT;
 
 //*************** Task to output baseband measurements ****************
 // Parameters:
@@ -59,5 +62,18 @@ int BasebandDataOutput(void* Param)
 		DataForDecode->ChannelState->LogicChannel, DataForDecode->ChannelState->Svid, DataForDecode->ChannelState->Signal,
 		DataForDecode->SymbolIndex, DataForDecode->TickCount, DataForDecode->DataStream);
 	WriteStreamPort(OutputBasebandDataPort, OutputBuffer, strlen(OutputBuffer));
+	return 0;
+}
+
+char NmeaString[2048];
+int NmeaOutput(void* Param)
+{
+	PNMEA_INFO NmeaInfo = (PNMEA_INFO)Param;
+	int Length;
+
+	if (!PortOpened(OutputNmeaPort))
+		return 0;
+	Length = NMEAEncode(NmeaInfo, NmeaInfo->NmeaTypes, NmeaString);
+	WriteStreamPort(OutputNmeaPort, NmeaString, Length);
 	return 0;
 }

@@ -356,6 +356,7 @@ int KFPosition(PCHANNEL_STATUS ObservationList[], int ObsCount, int PosUseSatCou
 	double H[3];
 	double GeoDistance;
 	double *dT = &STATE_DT_GPS;
+	double TempVector[10];
 	int PrevSignal = -1;
 	PSATELLITE_INFO SatelliteInfo = g_GpsSatelliteInfo;
 	int UseSystemMask = 0;
@@ -389,11 +390,11 @@ int KFPosition(PCHANNEL_STATUS ObservationList[], int ObsCount, int PosUseSatCou
 		ObservationList[i]->PsrVariance = ObservationVariance(ObservationList[i], &SatelliteInfo[sv_index], 0);
 		ObservationList[i]->DopplerVariance = ObservationVariance(ObservationList[i], &SatelliteInfo[sv_index], 1);
 
-		SatelliteInfo[sv_index].VectorX = g_PvtCoreData.h.data[0][i] = H[0] = (SatelliteInfo[sv_index].PosVel.x - STATE_X) / GeoDistance;
-		SatelliteInfo[sv_index].VectorY = g_PvtCoreData.h.data[1][i] = H[1] = (SatelliteInfo[sv_index].PosVel.y - STATE_Y) / GeoDistance;
-		SatelliteInfo[sv_index].VectorZ = g_PvtCoreData.h.data[2][i] = H[2] = (SatelliteInfo[sv_index].PosVel.z - STATE_Z) / GeoDistance;
+		SatelliteInfo[sv_index].VectorX = g_PvtCoreData.h.data[0][g_PvtCoreData.h.length[0]] = H[0] = (SatelliteInfo[sv_index].PosVel.x - STATE_X) / GeoDistance;
+		SatelliteInfo[sv_index].VectorY = g_PvtCoreData.h.data[1][g_PvtCoreData.h.length[0]] = H[1] = (SatelliteInfo[sv_index].PosVel.y - STATE_Y) / GeoDistance;
+		SatelliteInfo[sv_index].VectorZ = g_PvtCoreData.h.data[2][g_PvtCoreData.h.length[0]] = H[2] = (SatelliteInfo[sv_index].PosVel.z - STATE_Z) / GeoDistance;
 		SatelliteInfo[sv_index].SatInfoFlag |= SAT_INFO_LOS_VALID | SAT_INFO_LOS_MATCH;
-		g_PvtCoreData.h.weight[i] = 1.0;// weight reserved for future weighted LSQ expansion
+		g_PvtCoreData.h.weight[g_PvtCoreData.h.length[0]] = 1.0;// weight reserved for future weighted LSQ expansion
 
 		if (fabs(g_PvtCoreData.PMatrix[DtIndex[SystemIndex]]) > 1e10 || PsrObservationCheck(ObservationList[i], DeltaPsr))
 		{
@@ -411,6 +412,14 @@ int KFPosition(PCHANNEL_STATUS ObservationList[], int ObsCount, int PosUseSatCou
 				g_PvtCoreData.StateVector[j] += UpdateVector[j];
 		}
 	}
+	// calculatge Inv(HtH) for DOP
+	if (g_PvtCoreData.h.length[0] >= 4)
+	{
+		GetHtH(&(g_PvtCoreData.h), (double *)0, g_PvtCoreData.PosInvMatrix, 1);	// HtH
+		SymMatrixInv(g_PvtCoreData.PosInvMatrix, TempVector, 4);		// Inv(HtH)
+	}
+	else
+		g_PvtCoreData.PosInvMatrix[0] = -1;	// indicate invalid
 
 	return UseSystemMask;
 }

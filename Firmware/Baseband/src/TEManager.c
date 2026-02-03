@@ -50,6 +50,29 @@ void TEInitialize()
 	}
 }
 
+//*************** Interate each active TE Channel ****************
+//* this function will iterate each TE channel and return next active channel
+// Parameters:
+//   First: whether this is first iteration
+// Return value:
+//   Next active channel
+PCHANNEL_STATE IterateChannel(int First)
+{
+	static int ch = 0;
+	PCHANNEL_STATE ChannelState = NULL;
+
+	if (First)
+		ch = 0;
+	for (; ch < TOTAL_CHANNEL_NUMBER; ch ++)
+		if (ChannelOccupation & (1 << ch))
+		{
+			ChannelState = ChannelStateArray + ch;
+			ch ++;
+			break;
+		}
+	return ChannelState;
+}
+
 //*************** Get channel enable mask ****************
 // Parameters:
 //   none

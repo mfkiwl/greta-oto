@@ -67,6 +67,24 @@ void LlhToEcef(const LLH *llh_pos, KINEMATIC_INFO *ecef_pos)
 	ecef_pos->z = (n * (1.0 - WGS_E1_SQR) + llh_pos->hae) * sin (llh_pos->lat);  
 }
 
+//*************** convert from ECEF velocity to local coordinate ****************
+//* to avoid duplicate calculation, position in KINEMATIC_INFO
+// Parameters:
+//   ecef_pos: pointer to ECEF coordinate
+//   llh_pos: pointer to LLH coordinate
+// Return value:
+//   none
+void VelocityToLocal(const KINEMATIC_INFO *ecef_pos, const PCONVERT_MATRIX pConvertMatrix, GROUND_SPEED *local_speed)
+{
+	local_speed->ve = (pConvertMatrix->x2e * ecef_pos->vx) + (pConvertMatrix->y2e * ecef_pos->vy);
+	local_speed->vn = (pConvertMatrix->x2n * ecef_pos->vx) + (pConvertMatrix->y2n * ecef_pos->vy) + (pConvertMatrix->z2n * ecef_pos->vz);
+	local_speed->vu = (pConvertMatrix->x2u * ecef_pos->vx) + (pConvertMatrix->y2u * ecef_pos->vy) + (pConvertMatrix->z2u * ecef_pos->vz);
+	local_speed->Speed = sqrt(local_speed->ve * local_speed->ve + local_speed->vn + local_speed->vn);
+	local_speed->Course = atan2(local_speed->ve, local_speed->vn);
+	if (local_speed->Course < 0.0)
+		local_speed->Course += (PI * 2);
+}
+
 //*************** convert from GLONASS time to UTC time ****************
 // Parameters:
 //   LeapYears: leap year
@@ -139,7 +157,7 @@ void GlonassTimeToUtc(int LeapYears, int DayNumber, int DayMsCount, PSYSTEM_TIME
 //   pDayMsCount: pointer to millisecond within day
 // Return value:
 //   none
-void UtcToGlonassTime(PSYSTEM_TIME pUtcTime, int *LeapYears, int *DayNumber, int *DayMsCount)
+void UtcToGlonassTime(const PSYSTEM_TIME pUtcTime, int *LeapYears, int *DayNumber, int *DayMsCount)
 {
 	int Years, Days;
 
@@ -210,7 +228,7 @@ void GpsTimeToUtc(int GpsWeek, int WeekMsCount, PSYSTEM_TIME pUtcTime, PUTC_PARA
 //   pUtcParam: pointer to UTC parameter
 // Return value:
 //   none
-void UtcToGpsTime(PSYSTEM_TIME pUtcTime, int *pGpsWeek, int *pWeekMsCount, PUTC_PARAM pUtcParam)
+void UtcToGpsTime(const PSYSTEM_TIME pUtcTime, int *pGpsWeek, int *pWeekMsCount, PUTC_PARAM pUtcParam)
 {
 	int LeapYears, TotalDays, MsSeconds;
 
@@ -240,17 +258,17 @@ void UtcToGpsTime(PSYSTEM_TIME pUtcTime, int *pGpsWeek, int *pWeekMsCount, PUTC_
 	*pWeekMsCount = (TotalDays % 7) * 86400000 + MsSeconds;
 }
 
-//*************** calculate onvertion matrix based on ECEF position ****************
+//*************** calculate onversion matrix based on ECEF position ****************
 //* this is a approximation calculation to avoid sin/cos calculation
 //* |e|   |-y/P      x/P     0  | |x|
 //* |n| = |-x*z/P/R -y*z/P/R P/R|*|y|
 //* |u|   | x/R      y/R     z/R| |z|
 // Parameters:
 //   pReceiverPos: pointer to ECEF position
-//   pConvertMatrix: pointer to convertion matrix
+//   pConvertMatrix: pointer to conversion matrix
 // Return value:
 //   none
-void CalcConvMatrix(KINEMATIC_INFO *pReceiverPos, PCONVERT_MATRIX pConvertMatrix)
+void CalcConvMatrix(const KINEMATIC_INFO *pReceiverPos, PCONVERT_MATRIX pConvertMatrix)
 {
 	double P, R;
 
@@ -277,4 +295,55 @@ void CalcConvMatrix(KINEMATIC_INFO *pReceiverPos, PCONVERT_MATRIX pConvertMatrix
 	pConvertMatrix->x2n = -pConvertMatrix->y2e * pConvertMatrix->z2u;
 	pConvertMatrix->y2n =  pConvertMatrix->x2e * pConvertMatrix->z2u;
 	pConvertMatrix->z2n =  P / R;
+}
+
+//*************** calculate DOP values based on xyz DOP and conversion matrix ****************
+//* this is a approximation calculation to avoid sin/cos calculation
+//*            | x2e y2e  0  |      | P[0] P[1] P[3] |
+//* Cxyz2enu = | x2n y2n z2n |, P = | P[1] P[2] P[4] |
+//*            | x2u y2u z2u |      | P[3] P[4] P[5] |
+//* DOP matrix at ENU coordinate is Cxyz2enu*P*Cxyz2enu'
+//* only diagonal elements are needed
+//* TDOP is square root of P[9]
+// Parameters:
+//   PosInvMatrix: DOP matrix on xyz coordinate
+//   pConvertMatrix: pointer to conversion matrix
+//   DopArray: DOP value array
+// Return value:
+//   none
+void CalcDopValues(const double *PosInvMatrix, const PCONVERT_MATRIX pConvertMatrix, double *DopArray)
+{
+	double x2, y2, z2, xy, xz, yz;
+	double p0, p1, p2, p3, p4, p5;
+	double pe, pn, pu;
+
+	if (PosInvMatrix[0] <= 0)	// invalid
+	{
+		DopArray[0] = DopArray[1] = DopArray[2] = DopArray[3] = 99.;
+		return;
+	}
+
+	p0 = PosInvMatrix[0]; p2 = PosInvMatrix[2]; p5 = PosInvMatrix[5];
+	p1 = 2. * PosInvMatrix[1]; p3 = 2. * PosInvMatrix[3]; p4 = 2. * PosInvMatrix[4];
+
+	x2 = pConvertMatrix->x2e * pConvertMatrix->x2e; y2 = pConvertMatrix->y2e * pConvertMatrix->y2e; xy = pConvertMatrix->x2e * pConvertMatrix->y2e;
+	pe = x2 * p0 + xy * p1 + y2 * p2;
+
+	x2 = pConvertMatrix->x2n * pConvertMatrix->x2n; y2 = pConvertMatrix->y2n * pConvertMatrix->y2n; z2 = pConvertMatrix->z2n * pConvertMatrix->z2n;
+	xy = pConvertMatrix->x2n * pConvertMatrix->y2n; xz = pConvertMatrix->x2n * pConvertMatrix->z2n; yz = pConvertMatrix->y2n * pConvertMatrix->z2n;
+	pn = x2 * p0 + y2 * p2 + z2 * p5 + xy * p1 + xz * p3 + yz * p4;
+
+	x2 = pConvertMatrix->x2u * pConvertMatrix->x2u; y2 = pConvertMatrix->y2u * pConvertMatrix->y2u; z2 = pConvertMatrix->z2u * pConvertMatrix->z2u;
+	xy = pConvertMatrix->x2u * pConvertMatrix->y2u; xz = pConvertMatrix->x2u * pConvertMatrix->z2u; yz = pConvertMatrix->y2u * pConvertMatrix->z2u;
+	pu = x2 * p0 + y2 * p2 + z2 * p5 + xy * p1 + xz * p3 + yz * p4;
+
+	if (pe < 0. || pn < 0. || pu < 0. || PosInvMatrix[9] < 0.)
+	{
+		DopArray[0] = DopArray[1] = DopArray[2] = DopArray[3] = 99.;
+		return;
+	}
+	DopArray[0] = sqrt(pe + pn);
+	DopArray[1] = sqrt(pu);
+	DopArray[2] = sqrt(pe + pn + pu);
+	DopArray[3] = sqrt(PosInvMatrix[9]);
 }

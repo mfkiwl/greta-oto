@@ -212,7 +212,7 @@ unsigned int Crc24qEncode(unsigned int *BitStream, int Length)
 
 void LoadAllParameters()
 {
-	LoadParameters(PARAM_OFFSET_CONFIG, &g_PvtConfig, sizeof(g_PvtConfig));
+	LoadParameters(PARAM_OFFSET_CONFIG, &g_SystemConfig, sizeof(g_SystemConfig));
 	LoadParameters(PARAM_OFFSET_RCVRINFO, &g_ReceiverInfo, sizeof(g_ReceiverInfo));
 	LoadParameters(PARAM_OFFSET_IONOUTC, &g_GpsIonoParam, sizeof(g_GpsIonoParam));
 	LoadParameters(PARAM_OFFSET_IONOUTC+sizeof(g_GpsIonoParam), &g_BdsIonoParam, sizeof(g_BdsIonoParam));
@@ -228,7 +228,7 @@ void LoadAllParameters()
 
 void SaveAllParameters()
 {
-	SaveParameters(PARAM_OFFSET_CONFIG, &g_PvtConfig, sizeof(g_PvtConfig));
+	SaveParameters(PARAM_OFFSET_CONFIG, &g_SystemConfig, sizeof(g_SystemConfig));
 	SaveParameters(PARAM_OFFSET_RCVRINFO, &g_ReceiverInfo, sizeof(g_ReceiverInfo));
 	SaveParameters(PARAM_OFFSET_IONOUTC, &g_GpsIonoParam, sizeof(g_GpsIonoParam));
 	SaveParameters(PARAM_OFFSET_IONOUTC+sizeof(g_GpsIonoParam), &g_BdsIonoParam, sizeof(g_BdsIonoParam));
@@ -240,4 +240,47 @@ void SaveAllParameters()
 	SaveParameters(PARAM_OFFSET_GPSEPH, &g_GpsEphemeris, sizeof(g_GpsEphemeris));
 	SaveParameters(PARAM_OFFSET_BDSEPH, &g_BdsEphemeris, sizeof(g_BdsEphemeris));
 	SaveParameters(PARAM_OFFSET_GALEPH, &g_GalileoEphemeris, sizeof(g_GalileoEphemeris));
+}
+
+int PowInteger(int x, int y)
+{
+    int i, result = 1;
+    for (i = 0; i < y; i ++)
+        result *= x;
+    return result;
+}
+
+char *PrintUint(char *p, unsigned int Value, int Digits)
+{
+	int Size, i;
+	U8 IntDigits[10] = {0};
+
+	for (Size = 0; Value; Size ++, Value /= 10)
+		IntDigits[Size] = Value % 10;
+	if (Digits > Size)	// leading 0s
+		Size = Digits;
+	for (i = Size - 1; i >= 0; i --)
+		*(p++) = IntDigits[i] + '0';
+	*p = '\0';
+
+	return p;
+}
+
+char *PrintFloat(char *p, double Value, int Digits)
+{
+    unsigned int TempInt;
+
+    if (Value < 0)
+    {
+        Value = -Value;
+        *p++ = '-';
+    }
+    TempInt = (unsigned int)Value;
+    p = PrintUint(p, TempInt, 1);
+    *p++ = '.';
+	Value -= TempInt; Value *= PowInteger(10, Digits);
+	TempInt = (unsigned int)Value;
+    p = PrintUint(p, TempInt, Digits);
+
+    return p;
 }

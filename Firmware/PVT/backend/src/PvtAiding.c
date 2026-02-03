@@ -52,7 +52,7 @@ PSAT_PREDICT_PARAM CalcPredictParam(int PvtValid, int System, int svid)
 	int ReceiverTime = (System == SYSTEM_BDS) ? g_ReceiverInfo.ReceiverTime->BdsMsCount : g_ReceiverInfo.ReceiverTime->GpsMsCount;
 	int WeekNumber = GET_SYSTEM_ARRAY(System, g_ReceiverInfo.ReceiverTime->GpsWeekNumber, g_ReceiverInfo.ReceiverTime->BdsWeekNumber, g_ReceiverInfo.ReceiverTime->GpsWeekNumber - 1024);
 	double Distance, TravelTime, TransmitTime = ReceiverTime / 1000.0;
-	double ElevationMask = g_PvtConfig.ElevationMask * PI / 180;
+	double ElevationMask = g_SystemConfig.ElevationMask * PI / 180;
 
 	SatParam->Flag &= ~PREDICT_FLAG_MASK;
 	if (PvtValid && Ephemeris->flag)
